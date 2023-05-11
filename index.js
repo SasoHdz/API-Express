@@ -13,7 +13,8 @@ app.use(function(req, res, next) {
 
 app.use(bodyParser.json())
 
-const PUERTO = 3000
+const PUERTO = process.env.PORT || 3000;
+
 const DATABASE_URL='mysql://vtn457rszmx3lumultw2:pscale_pw_DFrxhOoOLheQH1odX65hMaXy59VoirfGLP2TaiXerns@aws.connect.psdb.cloud/prueba-data-saso?ssl={"rejectUnauthorized":true}'
 
 const conexion = mysql.createConnection(DATABASE_URL);
