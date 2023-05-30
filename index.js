@@ -13,12 +13,12 @@ app.use(function(req, res, next) {
 
 app.use(bodyParser.json())
 
-const PUERTO = 3000
+const PUERTO = 4500
 
 const conexion = mysql.createConnection(
     {
         host:'localhost',
-        database:'pruebas',
+        database:'AppMaterias',
         user:'root',
         password:'claymrx'
     }
@@ -37,34 +37,72 @@ app.get('/', (req, res) => {
     res.send('API')
 })
 
-app.get('/usuarios', (req, res) => {
-    const query = `SELECT * FROM usuarios;`
-    conexion.query(query, (error, resultado) => {
-        if(error) return console.error(error.message)
-
-        if(resultado.length > 0) {
-            res.json(resultado)
-        } else {
-            res.json(`No hay registros`)
-        }
+////Obtener maestros
+app.get('/maestros',(req, res)=> {
+    const query = `
+        SELECT no_emp,nombres, ap_paterno, ap_materno, horas_impartir, tipo_plaza FROM profesores;
+    `
+    const maestrosDB = conexion.query(query, (error, resultado) => {
+      if(error) return console.error(error.message)
+  
+      if(resultado.length > 0) {
+          res.json(resultado)
+      } else {
+          res.json(`No hay registros`)
+      }
     })
-})
+    return maestrosDB;
+});
 
-app.get('/usuarios/:id', (req, res) => {
+//Obtener horario de un maestro en especifio
+app.get('/maestros/:id/horario',(req, res) => {
     const { id } = req.params
+    const query = `
+    SELECT * from horario_disponible_profesor WHERE no_emp = ${id}`;
 
-    const query = `SELECT * FROM usuarios WHERE id_usuario=${id};`
     conexion.query(query, (error, resultado) => {
         if(error) return console.error(error.message)
-
+    
         if(resultado.length > 0) {
             res.json(resultado)
         } else {
             res.json(`No hay registros`)
         }
-    })
+      })
+});
+
+//Materias ofertadas, id, grupo
+app.get('/materias/ofertadas',(req, res)=>{
+    const query = `SELECT * from materias_ofertadas WHERE asignada = 0`;
+    conexion.query(query, (error, resultado) => {
+        if(error) return console.error(error.message)
+    
+        if(resultado.length > 0) {
+            res.json(resultado)
+        } else {
+            res.json(`No hay registros`)
+        }
+      })
+});
+
+//Obtener mas datos de un grupo (horario)
+app.get('/materias/:id/:grupo',(req, res)=>{
+    const { id, grupo } = req.params
+    const query = `SELECT * from grupos_ofertados WHERE id_materia = ${id} AND grupo = "${grupo}"`;
+    conexion.query(query, (error, resultado) => {
+        if(error) return console.error(error.message)
+    
+        if(resultado.length > 0) {
+            res.json(resultado)
+        } else {
+            res.json(`No hay registros`)
+        }
+      })
 })
 
+
+
+/* 
 app.post('/usuarios/agregar', (req, res) => {
     const usuario = {
         nombre: req.body.nombre,
@@ -100,4 +138,4 @@ app.delete('/usuarios/borrar/:id', (req, res) => {
 
         res.json(`Se eliminó correctamente el usuario`)
     })
-})
+}) */
