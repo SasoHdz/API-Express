@@ -1,6 +1,9 @@
 const express = require('express')
 const mysql = require('mysql')
 const bodyParser = require('body-parser')
+const util = require('util');
+const promisify = util.promisify;
+
 
 const app = express()
 
@@ -37,22 +40,119 @@ app.get('/', (req, res) => {
     res.send('API')
 })
 
-////Obtener maestros
-app.get('/maestros',(req, res)=> {
-    const query = `
-        SELECT no_emp, nombres AS nombre, ap_paterno, ap_materno, horas_impartir, tipo_plaza FROM profesores;
-    `
-    const maestrosDB = conexion.query(query, (error, resultado) => {
-      if(error) return console.error(error.message)
+function formatTime(h) {
+    let x;
+    h <= 9 ? (x = `0${h.toString()}:00`) : (x = `${h.toString()}:00`);
+    return x;
+}
+
+function obtenerMateriasProfe(id) {
+    return new Promise((resolve, reject)=> {
+        const query = `SELECT cve_materia FROM materias_profesor WHERE no_emp = ?`;
+        conexion.query(query,[id],(error, resultados)=>{
+            if (error) {
+                reject(error);
+              } else {
+                let materias = [];
+                for(let r of resultados){
+                    materias.push(r.cve_materia);
+                }
+                resolve(materias);
+              }
+        });
+    });
+}
+
+function obtenerHorarioProfe(id){
+    return new Promise((resolve, reject)=> {
+        const query = `SELECT no_emp, dia, hi AS horaInicio, hf AS horaFin from horario_disponible_profesor WHERE no_emp = ?`;
+        conexion.query(query,[id],(error, resultados)=>{
+            if (error) {
+                reject(error);
+              } else {
+                let horario = {
+                    LUNES: [],
+                    MARTES: [],
+                    MIERCOLES: [],
+                    JUEVES: [],
+                    VIERNES: [],
+                };
+                for(let r of resultados){
+                    const {dia,horaInicio,horaFin} = r;
+                    if(!horario[dia]){
+                       horario[dia] = [];
+                    }
+                    horario[dia].push({
+                        horaInicio: formatTime(horaInicio),
+                        horaFin: formatTime(horaFin)
+                    })
+                }
+                resolve(horario);
+              }
+        });
+    });
+}
+
+function obtenerMateriasAsignadasProfe(id){
+    return new Promise((resolve, reject)=> {
+        const query = `SELECT id_materia,grupo FROM materias_ofertadas WHERE no_emp = ?`;
+        conexion.query(query,[id],(error, resultados)=>{
+            if (error) {
+                reject(error);
+              } else {
+                let materias = [];
+                for(let r of resultados){
+                    const {id_materia,grupo} = r;
+                    materias.push({
+                        ...r
+                    });
+                }
+                resolve(materias);
+              }
+        });
+    });
+}
+
+async function obtenerMaestros() {
+    try {
+      const query = `SELECT no_emp AS noEmp, nombres AS nombre, ap_paterno, ap_materno, tipo_plaza AS tipo, horas_impartir FROM profesores`;
+      const resultados = await promisify(conexion.query).call(conexion, query);
   
-      if(resultado.length > 0) {
-          res.json(resultado)
-      } else {
-          res.json(`No hay registros`)
+      const maestrosMap = new Map();
+  
+      for (const r of resultados) {
+        const { noEmp } = r;
+        const materias = await obtenerMateriasProfe(noEmp);
+        const horaDisp = await obtenerHorarioProfe(noEmp);
+        const mAsginadas = await obtenerMateriasAsignadasProfe(noEmp);
+
+        if (!maestrosMap.has(noEmp)) {
+          maestrosMap.set(noEmp, {
+            ...r,
+            hrsEnableWeek: horaDisp,
+            materiasImpartir: materias,
+            materiasAsignadas: mAsginadas
+          });
+        }
       }
-    })
-    return maestrosDB;
+  
+      const profes = Array.from(maestrosMap.values());
+      return profes;
+    } catch (error) {
+      throw error;
+    }
+}
+  
+app.get('/maestros', async (req, res) => {
+    try {
+      const maestros = await obtenerMaestros();
+      res.json(maestros);
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ mensaje: 'Error en el servidor' });
+    }
 });
+  
 
 //Obtener horario de un maestro en especifio
 app.get('/maestros/:id/horario',(req, res) => {
