@@ -255,6 +255,75 @@ app.get('/materias/profesor/:id',(req, res) => {
       })
 });
 
+function obtenerHorarioMateria(id,grupo){
+    return new Promise((resolve, reject)=> {
+        const query = `SELECT dia,hi AS horaInicio, hf AS horaFin FROM grupos_ofertados WHERE id_materia = ? AND grupo = ?;`;
+        conexion.query(query,[id,grupo],(error, resultados)=>{
+            if (error) {
+                reject(error);
+              } else {
+                let horario = {
+                    LUNES: {horaInicio: '', horaFin: ''},
+                    MARTES: {horaInicio: '', horaFin: ''},
+                    MIERCOLES: {horaInicio: '', horaFin: ''},
+                    JUEVES: {horaInicio: '', horaFin: ''},
+                    VIERNES: {horaInicio: '', horaFin: ''},
+                };
+                for(let r of resultados){
+                    const {dia,horaInicio,horaFin} = r;
+                    horario[dia] = {
+                        horaInicio: formatTime(horaInicio),
+                        horaFin: formatTime(horaFin)
+                    }
+                }
+                resolve(horario);
+              }
+        });
+    });
+}
+
+async function obtenerMaterias(){
+    try {
+        const query = `SELECT mf.id_materia,
+        (SELECT cve_materia FROM materias AS m WHERE m.id_materia = mf.id_materia ) AS codigo,
+        (SELECT descripcion FROM materias AS m WHERE m.id_materia = mf.id_materia ) AS titulo,
+        (SELECT creditos FROM materias AS m WHERE m.id_materia = mf.id_materia ) AS creditos,
+        (SELECT id_reticula FROM materias AS m WHERE m.id_materia = mf.id_materia ) AS reticula,
+        (SELECT salon FROM grupos_ofertados AS gf WHERE gf.id_materia = mf.id_materia LIMIT 1) AS salon,
+        mf.asignada AS enable, mf.no_emp AS profesorAsignado, mf.grupo FROM materias_ofertadas AS mf;`;        
+        const resultados = await promisify(conexion.query).call(conexion, query);
+        const materiasMap = new Map();
+    
+        for (const r of resultados) {
+          const { id_materia,grupo } = r;
+          const materias = await obtenerHorarioMateria(id_materia,grupo);
+         
+  
+          if (!materiasMap.has(id_materia)) {
+            materiasMap.set(id_materia, {
+              ...r,
+              horarioSemana: materias
+            });
+          }
+        }
+    
+        const newMaterias = Array.from(materiasMap.values());
+        return newMaterias;
+      } catch (error) {
+        throw error;
+      }
+}
+
+app.get('/materias',async(req, res)=>{
+    try {
+        const materias = await obtenerMaterias();
+        res.json(materias);
+      } catch (error) {
+        console.error(error);
+        res.status(500).json({ mensaje: 'Error en el servidor' });
+      }
+})
+
 // Dia, horaInicio, horaFin, de todos los dias de la semana
 app.get(`/materias/:id/:grupo/horario`,(req, res) => {
     const { id, grupo } = req.params
@@ -330,24 +399,7 @@ app.get('/materias/:id/:grupo/salon',(req, res)=>{
       })
 })
 
-app.get('/materias',(req, res)=>{
-    const query = `SELECT mf.id_materia,
-    (SELECT cve_materia FROM materias AS m WHERE m.id_materia = mf.id_materia ) AS codigo,
-    (SELECT descripcion FROM materias AS m WHERE m.id_materia = mf.id_materia ) AS titulo,
-    (SELECT creditos FROM materias AS m WHERE m.id_materia = mf.id_materia ) AS creditos,
-    (SELECT id_reticula FROM materias AS m WHERE m.id_materia = mf.id_materia ) AS reticula,
-    (SELECT salon FROM grupos_ofertados AS gf WHERE gf.id_materia = mf.id_materia LIMIT 1) AS salon,
-    mf.asignada AS enable, mf.no_emp AS profesorAsignado, mf.grupo FROM materias_ofertadas AS mf;`;
-    conexion.query(query, (error, resultado) => {
-        if(error) return console.error(error.message)
-    
-        if(resultado.length > 0) {
-            res.json(resultado)
-        } else {
-            res.json(`No hay registros`)
-        }
-      })
-})
+
 
 
 
