@@ -48,7 +48,7 @@ function formatTime(h) {
 
 function obtenerMateriasProfe(id) {
     return new Promise((resolve, reject)=> {
-        const query = `SELECT cve_materia FROM materias_profesor WHERE no_emp = ?`;
+        const query = `Select DISTINCT cve_materia from materias_profesor WHERE no_emp = ?`;
         conexion.query(query,[id],(error, resultados)=>{
             if (error) {
                 reject(error);
@@ -300,8 +300,9 @@ async function obtenerMaterias(){
          
   
           if (!materiasMap.has(id_materia)) {
-            materiasMap.set(id_materia, {
+            materiasMap.set(id_materia+grupo, {
               ...r,
+              enable:(r.enable===0)? false: true,
               horarioSemana: materias
             });
           }
