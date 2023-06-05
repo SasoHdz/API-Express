@@ -291,7 +291,7 @@ async function obtenerMaterias() {
         (SELECT creditos FROM materias AS m WHERE m.id_materia = mf.id_materia ) AS creditos,
         (SELECT id_reticula FROM materias AS m WHERE m.id_materia = mf.id_materia ) AS reticula,
         (SELECT salon FROM grupos_ofertados AS gf WHERE gf.id_materia = mf.id_materia LIMIT 1) AS salon,
-        mf.asignada AS enable, mf.no_emp AS profesorAsignado, mf.grupo FROM materias_ofertadas AS mf;`;
+        mf.asignada AS enable, mf.no_emp AS profesorAsignado, mf.grupo FROM materias_ofertadas AS mf WHERE mf.asignada=0;`;
     const resultados = await promisify(conexion.query).call(conexion, query);
     const materiasMap = new Map();
 
@@ -428,42 +428,32 @@ app.get("/materias/:id/:grupo/salon", (req, res) => {
   });
 });
 
-async function ingregarHoraGrupo(id_materia,salon, grupo, dia, hi, hf){
-    const query = 
-    `INSERT INTO grupos_ofertados(id_materia,dia, hi,hf,salon,grupo)
-        VALUES(?,?,?,?,?,?)
-    `
-    conexion.query(query,[id_materia,salon,grupo,dia,hi,hf], (error) => {
-        if (error) return console.error(error.message);
-    
-        res.json(`Se actualizó correctamente el usuario`);
-      });
+async function ingresarHoraGrupo(id_materia, salon, grupo, dia, hi, hf) {
+  return new Promise((resolve, reject) => {
+    const query = `INSERT INTO grupos_ofertados(id_materia, dia, hi, hf, salon, grupo) VALUES (?, ?, ?, ?, ?, ?)`;
+    conexion.query(query, [id_materia, dia, hi, hf, salon, grupo], (error, resultados) => {
+      if (error) {
+        console.error(error.message);
+        reject("Error en el servidor");
+      } else {
+        resolve("Se creo un grupo con exito");
+      }
+    });
+  });
 }
 
-async function ingresarGrupo(id_materia,asignada,no_emp,grupo){
-    const query = 
-    `INSERT INTO materias_ofertadas(id_materia,asignada,no_emp,grupo)
-        VALUES(?,?,?,?)
-    `
-    conexion.query(query,[id_materia,asignada,no_emp,grupo], (error) => {
-        if (error) return console.error(error.message);
-    
-        res.json(`Se actualizó correctamente`);
-      });
-}
-
-async function asignarGrupo(no_emp,id_materia,grupo){
-    const query = 
-    `UPDATE materias_ofertadas 
-        SET asignada = 1 , no_emp = ? 
-        WHERE id_materia = ? AND grupo = ?
-    `
-
-    conexion.query(query,[no_emp,id_materia,grupo], (error) => {
-        if (error) return console.error(error.message);
-    
-        res.json(`Se actualizó correctamente`);
-      });
+async function ingresarGrupo(id_materia, grupo) {
+  return new Promise((resolve, reject) => {
+    const query = `INSERT INTO materias_ofertadas(id_materia, grupo) VALUES (?, ?)`;
+    conexion.query(query, [id_materia, grupo], (error, resultados) => {
+      if (error) {
+        console.error(error.message);
+        reject("Error en el servidor");
+      } else {
+        resolve("Se creo con exito");
+      }
+    });
+  });
 }
 
 app.post("/grupo/agregar",async (req, res) => {
@@ -476,12 +466,12 @@ app.post("/grupo/agregar",async (req, res) => {
 
   try {
 
-    await ingresarGrupo(id_materia,asignada,no_emp,grupo);
-    await ingregarHoraGrupo(id_materia,salon,grupo,"LUNES",horarioSemana.LUNES.hi,horarioSemana.LUNES.hf);
-    await ingregarHoraGrupo(id_materia,salon,grupo,"MARTES",horarioSemana.MARTES.hi,horarioSemana.MARTES.hf);
-    await ingregarHoraGrupo(id_materia,salon,grupo,"MIERCOLES",horarioSemana.MIERCOLES.hi,horarioSemana.MIERCOLES.hf);
-    await ingregarHoraGrupo(id_materia,salon,grupo,"JUEVES",horarioSemana.JUEVES.hi,horarioSemana.JUEVES.hf);
-    await ingregarHoraGrupo(id_materia,salon,grupo,"VIERNES",horarioSemana.VIERNES.hi,horarioSemana.VIERNES.hf);
+    await ingresarGrupo(id_materia,grupo);
+    await ingresarHoraGrupo(id_materia,salon,grupo,"LUNES",horarioSemana.LUNES.hi,horarioSemana.LUNES.hf);
+    await ingresarHoraGrupo(id_materia,salon,grupo,"MARTES",horarioSemana.MARTES.hi,horarioSemana.MARTES.hf);
+    await ingresarHoraGrupo(id_materia,salon,grupo,"MIERCOLES",horarioSemana.MIERCOLES.hi,horarioSemana.MIERCOLES.hf);
+    await ingresarHoraGrupo(id_materia,salon,grupo,"JUEVES",horarioSemana.JUEVES.hi,horarioSemana.JUEVES.hf);
+    await ingresarHoraGrupo(id_materia,salon,grupo,"VIERNES",horarioSemana.VIERNES.hi,horarioSemana.VIERNES.hf);
 
     res.json();
   } catch (error) {
@@ -490,19 +480,39 @@ app.post("/grupo/agregar",async (req, res) => {
   }
 });
 
-app.put('/grupos/asignar',async (req, res) => {
-    const grupos = req.body;
-  
-    try {
-      for(let i = 0; i<grupos.length;i++){
-        await asignarGrupo(grupos[i].no_emp,grupos[i].id_materia,grupos[i].grupo)
+function asignarMateria(no_emp,id_materia,grupo){
+  return new Promise((resolve, reject) => {
+    const query = `
+    UPDATE materias_ofertadas
+    SET asignada = 1, no_emp = ?
+    WHERE id_materia = ? AND grupo = ?;
+    `;
+    conexion.query(query, [no_emp,id_materia,grupo], (error, resultados) => {
+      if (error) {
+        reject(error);
+      } else {
+        resolve("Listo");
       }
-      res.json();
-    } catch (error) {
-      console.error(error);
-      res.status(500).json({ mensaje: "Error en el servidor" });
-    }
-})
+    });
+  });
+}
+
+app.put('/grupos/asignar', async (req, res) => {
+  const datos = req.body; // Asumiendo que los datos se encuentran en req.body
+
+  try {
+    await Promise.all(datos.map(async (g) => {
+      await Promise.all(g.materias.map(async (m) => {
+        await asignarMateria(g.no_emp, m.id_materia, m.grupo);
+      }));
+    }));
+
+    res.json({ mensaje: "Actualización exitosa" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ mensaje: "Error en la actualización" });
+  }
+});
 
 async function obtenerMaestro(id) {
   try {
@@ -595,7 +605,6 @@ function generarExcel(req, res) {
     });
 }
 
-
 // Ruta para generar el archivo Excel
 app.post('/generar-excel', (req, res) => {
   const workbook = new ExcelJS.Workbook();
@@ -647,6 +656,8 @@ app.post('/generar-excel', (req, res) => {
       res.status(500).send('Error al generar el archivo de Excel');
     });
 });
+
+
 
 
 
